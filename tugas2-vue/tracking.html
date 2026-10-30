@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracking Delivery Order — SITTA</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topnav">
+  <div class="brand">
+    <span class="brand-mark"><img src="assets/logo-ut-icon.png" alt="Logo Universitas Terbuka"></span>
+    SITTA
+  </div>
+  <nav>
+    <a href="index.html">Beranda</a>
+    <a href="stok.html">Stok Bahan Ajar</a>
+    <a href="tracking.html" class="active">Tracking DO</a>
+  </nav>
+</header>
+
+<div id="app">
+  <main class="main-area">
+
+    <div class="page-head">
+      <h1>Tracking Delivery Order</h1>
+      <p>Pantau status pengiriman bahan ajar dan catat Delivery Order (DO) baru.</p>
+    </div>
+
+    <!-- Panel: Tambah DO -->
+    <section class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Catat Delivery Order Baru</h2>
+        <button type="button" class="btn-ghost btn-sm" @click="showForm = !showForm">
+          {{ showForm ? 'Sembunyikan form' : 'Tampilkan form' }}
+        </button>
+      </div>
+
+      <form v-show="showForm" @submit.prevent="submitForm" style="margin-top:10px;">
+        <div class="field-grid">
+          <div class="field">
+            <label>Nomor DO (otomatis)</label>
+            <input type="text" :value="nextNomorDO" disabled>
+          </div>
+          <div class="field" :class="{ 'has-error': errors.nim }">
+            <label>NIM *</label>
+            <input type="text" v-model="form.nim" placeholder="Contoh: 123456789" inputmode="numeric">
+            <p class="error-msg">{{ errors.nim }}</p>
+          </div>
+        </div>
+
+        <div class="field" :class="{ 'has-error': errors.nama }">
+          <label>Nama *</label>
+          <input type="text" v-model="form.nama" placeholder="Nama penerima">
+          <p class="error-msg">{{ errors.nama }}</p>
+        </div>
+
+        <div class="field-grid">
+          <div class="field" :class="{ 'has-error': errors.ekspedisiKode }">
+            <label>Ekspedisi *</label>
+            <select v-model="form.ekspedisiKode">
+              <option value="" disabled>Pilih ekspedisi</option>
+              <option v-for="e in pengirimanList" :key="e.kode" :value="e.kode">JNE {{ e.nama }}</option>
+            </select>
+            <p class="error-msg">{{ errors.ekspedisiKode }}</p>
+          </div>
+          <div class="field">
+            <label>Tanggal Kirim</label>
+            <input type="date" v-model="form.tanggalKirim">
+          </div>
+        </div>
+
+        <div class="field" :class="{ 'has-error': errors.paketKode }">
+          <label>Paket Bahan Ajar *</label>
+          <select v-model="form.paketKode">
+            <option value="" disabled>Pilih paket</option>
+            <option v-for="p in paketList" :key="p.kode" :value="p.kode">{{ p.kode }} — {{ p.nama }}</option>
+          </select>
+          <p class="error-msg">{{ errors.paketKode }}</p>
+        </div>
+
+        <!-- Detail isi paket muncul setelah paket dipilih -->
+        <div class="paket-detail-box" v-if="selectedPaketDetail">
+          <strong>Isi paket {{ selectedPaketDetail.nama }}:</strong>
+          <ul>
+            <li v-for="kode in selectedPaketDetail.isi" :key="kode">{{ kode }}</li>
+          </ul>
+        </div>
+
+        <div class="field">
+          <label>Total Harga (otomatis dari paket)</label>
+          <input type="text" :value="formatRupiah(form.total)" disabled>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" @click="resetForm">Bersihkan</button>
+          <button type="submit" class="btn-primary">Simpan Delivery Order</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Panel: Daftar & Pencarian DO -->
+    <section class="panel">
+      <h2>Daftar Delivery Order</h2>
+      <div class="filter-field" style="max-width:320px; margin-bottom:10px;">
+        <label for="search-do">Cari Nomor DO</label>
+        <input id="search-do" type="text" v-model="searchNomor" placeholder="Contoh: DO2025-0001">
+      </div>
+
+      <div v-if="filteredTrackingList.length === 0" class="empty-state">
+        Tidak ada Delivery Order yang cocok dengan pencarian.
+      </div>
+
+      <div v-else>
+        <div class="list-row"
+             v-for="item in filteredTrackingList"
+             :key="item.nomorDO"
+             :class="{ active: selectedDO && selectedDO.nomorDO === item.nomorDO }"
+             @click="viewDetail(item)">
+          <div>
+            <div class="nomor" v-text="item.nomorDO"></div>
+            <div class="meta">{{ item.nama }} · {{ item.ekspedisi }}</div>
+          </div>
+          <span v-if="item.status === 'Selesai Antar'" class="badge ok">Selesai Antar</span>
+          <span v-else-if="item.status === 'Dalam Perjalanan'" class="badge mid">Dalam Perjalanan</span>
+          <span v-else class="badge low">{{ item.status }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel: Detail & Linimasa -->
+    <section class="panel" v-if="selectedDO">
+      <h2>{{ selectedDO.nama }}</h2>
+      <p class="panel-sub">Nomor DO {{ selectedDO.nomorDO }}</p>
+
+      <div class="track-summary">
+        <div class="item"><div class="label">Status</div><div class="val">{{ selectedDO.status }}</div></div>
+        <div class="item"><div class="label">Ekspedisi</div><div class="val">{{ selectedDO.ekspedisi }}</div></div>
+        <div class="item"><div class="label">Tanggal Kirim</div><div class="val">{{ selectedDO.tanggalKirim }}</div></div>
+        <div class="item"><div class="label">Total Harga</div><div class="val">{{ formatRupiah(selectedDO.total) }}</div></div>
+      </div>
+
+      <h2 style="font-size:1rem;">Perjalanan Paket</h2>
+      <ul class="timeline">
+        <li v-for="(p, idx) in selectedDO.perjalanan" :key="idx" :class="{ latest: idx === selectedDO.perjalanan.length - 1 }">
+          <div class="time">{{ p.waktu }}</div>
+          <div class="desc">{{ p.keterangan }}</div>
+        </li>
+      </ul>
+    </section>
+    <section class="panel empty-state" v-else>
+      Pilih salah satu Delivery Order pada daftar di atas untuk melihat linimasa pengirimannya.
+    </section>
+
+  </main>
+
+  <div class="alert-toast" :class="{ show: toastMessage, danger: toastType === 'danger' }">{{ toastMessage }}</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.7.16/vue.min.js"></script>
+<script src="js/tracking-app.js"></script>
+</body>
+</html>
